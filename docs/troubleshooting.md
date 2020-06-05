@@ -84,7 +84,7 @@ For gimbal motors, it is recommended to set the `motor.config.calibration_curren
 
 ## Common Encoder Errors
 
-* `ERROR_CPR_OUT_OF_RANGE = 0x02`
+* `ERROR_CPR_POLEPAIRS_MISMATCH = 0x02`
 
 Confirm you have entered the correct count per rotation (CPR) for [your encoder](https://docs.odriverobotics.com/encoders). The ODrive uses your supplied value for the motor pole pairs to measure the CPR. So you should also double check this value.
 

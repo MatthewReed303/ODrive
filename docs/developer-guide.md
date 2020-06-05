@@ -50,13 +50,20 @@ $ tup --version                 # should be 0.7.5 or later
 $ python --version              # should be 3.7 or later
 ```
 
-#### Linux (Ubuntu)
+#### Linux (Ubuntu < 20.04)
 ```bash
 sudo add-apt-repository ppa:team-gcc-arm-embedded/ppa
 sudo apt-get update
 sudo apt-get install gcc-arm-embedded
 sudo apt-get install openocd
 sudo add-apt-repository ppa:jonathonf/tup && sudo apt-get update && sudo apt-get install tup
+```
+
+#### Linux (Ubuntu >= 20.04)
+```bash
+sudo apt install gcc-arm-embedded
+sudo apt install openocd
+sudo apt install tup
 ```
 
 #### Arch Linux
@@ -98,7 +105,7 @@ __CONFIG_BOARD_VERSION__: The board version you're using. Can be `v3.1`, `v3.2`,
 
 __CONFIG_USB_PROTOCOL__: Defines which protocol the ODrive should use on the USB interface.
  * `native`: The native ODrive protocol. Use this if you want to use the python tools in this repo. Can maybe work with macOS.
- * `native-stream`: Like the native ODrive protocol, but the ODrive will treat the USB connection exactly as if it was a UART connection. __ Maybe need to use this if you're on macOS__. This is necessary because macOS doesn't grant our python tools sufficient low-level access to treat the device as the USB device that it is.
+ * `native-stream`: Like the native ODrive protocol, but the ODrive will treat the USB connection exactly as if it was a UART connection. __You may need to use this if you're on macOS__. This is necessary because macOS doesn't grant our python tools sufficient low-level access to treat the device as the USB device that it is.
  * `none`: Disable USB. The device will still show up when plugged in but it will ignore any commands.
  
  **Note**: There is a second USB interface that is always a serial port.
@@ -108,6 +115,8 @@ __CONFIG_UART_PROTOCOL__: Defines which protocol the ODrive should use on the UA
  * `ascii`: The ASCII protocol. Use this option if you control the ODrive with an Arduino. The ODrive Arduino library is not yet updated to the native protocol.
  * `none`: Disable UART.
 
+__CONFIG_DEBUG__: Defines wether debugging will be enabled when compiling the firmware; specifically the `-g -gdwarf-2` flags. Note that printf debugging will only function if your tup.config specifies the `USB_PROTOCOL` or `UART_PROTOCOL` as stdout and `DEBUG_PRINT` is defined. See the IDE specific documentation for more information.
+
 You can also modify the compile-time defaults for all `.config` parameters. You will find them if you search for `AxisConfig`, `MotorConfig`, etc.
 
 <br><br>
@@ -116,6 +125,8 @@ You can also modify the compile-time defaults for all `.config` parameters. You 
 1. Run `make` in the `Firmware` directory.
 2. Connect the ODrive via USB and power it up.
 3. Flash the firmware using [odrivetool dfu](odrivetool#device-firmware-update).
+
+If you get `/bin/sh: 1: python: not found` while running `make`, change the tup file command to use `python3` 
 
 ### Flashing using an STLink/v2 programmer
 
@@ -128,7 +139,7 @@ If the flashing worked, you can connect to the board using the [odrivetool](gett
 
 <br><br>
 ## Testing
-The script `tools/run_tests.py` runs a sequence of automated tests for several firmware features as well as high power burn-in tests. Some tests only need one ODrive and one motor/encoder pair while other tests need a back-to-back test rig such as [this one](https://cad.onshape.com/documents/026bda35ad5dff4d73c1d37f/w/ae302174f402737e1fdb3783/e/5ca143a6e5e24daf1fe8e434). In any case, to run the tests you need to provide a YAML file that lists the parameters of your test setup. An example can be found at [`tools/test-rig-parallel.yaml`](tools/test-rig-parallel.yaml`). The programmer serial number can be found by running `Firmware/find_programmer.sh` (make sure it has the latest formware from STM).
+The script `tools/run_tests.py` runs a sequence of automated tests for several firmware features as well as high power burn-in tests. Some tests only need one ODrive and one motor/encoder pair while other tests need a back-to-back test rig such as [this one](https://cad.onshape.com/documents/026bda35ad5dff4d73c1d37f/w/ae302174f402737e1fdb3783/e/5ca143a6e5e24daf1fe8e434). In any case, to run the tests you need to provide a YAML file that lists the parameters of your test setup. An example can be found at [`tools/test-rig-parallel.yaml`](tools/test-rig-parallel.yaml`). The programmer serial number can be found by running `Firmware/find_programmer.sh` (make sure it has the latest firmware from STM).
 
 <div class="alert" markdown="span">The test script commands the ODrive to high currents and high motor speeds so if your ODrive is connected to anything other than a stirdy test-rig (or free spinning motors), it will probably break your machine.</div>
 
