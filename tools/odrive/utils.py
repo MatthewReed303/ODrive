@@ -50,15 +50,25 @@ def dump_errors(odrv, clear=False):
         for name, remote_obj, errorcodes in module_decode_map:
             prefix = ' '*2 + name + ": "
             if (remote_obj.error != errorcodes.ERROR_NONE):
+                foundError = False
                 print(prefix + _VT100Colors['red'] + "Error(s):" + _VT100Colors['default'])
                 errorcodes_tup = [(name, val) for name, val in errorcodes.__dict__.items() if 'ERROR_' in name]
                 for codename, codeval in errorcodes_tup:
                     if remote_obj.error & codeval != 0:
+                        foundError = True
                         print("    " + codename)
+                if not foundError:
+                    print("    " + 'UNKNOWN ERROR!')
                 if clear:
                     remote_obj.error = errorcodes.ERROR_NONE
             else:
                 print(prefix + _VT100Colors['green'] + "no error" + _VT100Colors['default'])
+
+def oscilloscope_dump(odrv, num_vals, filename='oscilloscope.csv'):
+    with open(filename, 'w') as f:
+        for x in range(num_vals):
+            f.write(str(odrv.get_oscilloscope_val(x)))
+            f.write('\n')
 
 data_rate = 100
 plot_rate = 10

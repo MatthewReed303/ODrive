@@ -72,19 +72,18 @@ void MX_GPIO_Init(void);
 
 void SetGPIO12toUART();
 bool GPIO_subscribe(GPIO_TypeDef* GPIO_port, uint16_t GPIO_pin,
-    uint32_t pull_up_down,
-    void (*callback)(void*), void* ctx);
+    uint32_t pull_up_down, void (*callback)(void*), void* ctx);
 void GPIO_unsubscribe(GPIO_TypeDef* GPIO_port, uint16_t GPIO_pin);
 void GPIO_set_to_analog(GPIO_TypeDef* GPIO_port, uint16_t GPIO_pin);
 
-uint16_t get_gpio_pin_by_pin(uint16_t GPIO_pin);
-GPIO_TypeDef* get_gpio_port_by_pin(uint16_t GPIO_pin);
 
 #if HW_VERSION_MAJOR == 3 && HW_VERSION_MINOR <= 4
 #define GPIO_COUNT  5
 #else
 #define GPIO_COUNT  8
 #endif
+
+#define PWM_IN_COUNT 4
 
 /* USER CODE END Prototypes */
 
