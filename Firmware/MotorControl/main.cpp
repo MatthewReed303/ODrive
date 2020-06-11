@@ -243,13 +243,16 @@ int odrive_main(void) {
     pwm_in_init();
 
     // Setup hardware for all components
-    for (size_t i = 0; i < AXIS_COUNT; ++i) {
-        axes[i]->setup();
-    }
+    //for (size_t i = 0; i < AXIS_COUNT; ++i) {
+    //    axes[i]->setup();
+    //}
 
-    for(auto& axis : axes){
-        axis->encoder_.setup();
-    }
+    //for(auto& axis : axes){
+    //    axis->encoder_.setup();
+    //}
+
+    axes[0]->setup();
+    axes[0]->encoder_.setup();
 
     // Start PWM and enable adc interrupts/callbacks
     start_adc_pwm();
