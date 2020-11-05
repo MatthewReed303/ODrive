@@ -68,8 +68,12 @@ Connect the encoder(s) to J4. The A,B phases are required, and the Z (index puls
 <div class="alert">
  Always think safety before powering up the ODrive if motors are attached. Consider what might happen if the motor spins as soon as power is applied.
 </div>
+
 * Unlike some devices, the ODrive does not recieve power over the USB port so the 24/56 volt power input is required even just to communicate with it using USB. It is ok to power up the ODrive before or after connecting the USB cable.
+
 * To power up the ODrive, connect the power source to the DC terminals. Make sure to pay attention to the polarity. Try to connect the power source first and then turn it on to avoid inrush current. If this can't be avoided then a small spark is normal. This is caused by the capacitors charging up.
+
+* Make sure to avoid a ground loop! See the [ground loop page](ground-loops.md) for details.
 
 ## Downloading and Installing Tools
 Most instructions in this guide refer to a utility called `odrivetool`, so you should install that first.
@@ -77,7 +81,7 @@ Most instructions in this guide refer to a utility called `odrivetool`, so you s
 ### Windows
 1. Install Python 3. We recommend the Anaconda distribution because it packs a lot of useful scientific tools, however you can also install the standalone python.
   * __Anaconda__: Download the installer from [here](https://www.anaconda.com/download/#windows). Execute the downloaded file and follow the instructions.
-  * __Standalone Python__: Download the installer from [here](https://www.python.org/downloads/). Execute the downloaded file and follow the instructions.
+  * __Standalone Python__: Download the installer for 3.8.6 from [here](https://www.python.org/downloads/release/python-386/). Execute the downloaded file and follow the instructions.  As of Oct 2020, Matplotlib (required by odrivetool) had not been updated to work with 3.9, so please use 3.8.6.
   * If you have Python 2 installed alongside Python 3, replace `pip` by `C:\Users\YOUR_USERNAME\AppData\Local\Programs\Python\Python36-32\Scripts\pip`. If you have trouble with this step then refer to [this walkthrough](https://www.youtube.com/watch?v=jnpC_Ib_lbc).
 2. Launch the command prompt.
   * __Anaconda__: In the start menu, type `Anaconda Prompt` <kbd>Enter</kbd>
@@ -357,7 +361,7 @@ You can now control the velocity with `axis.controller.input_vel = 1` [turn/s].
 Set `axis.controller.config.control_mode = CONTROL_MODE_TORQUE_CONTROL`.<br>
 You can now control the torque with `axis.controller.input_torque = 0.1` [Nm].
 
-Note: If you exceed `vel_limit` in current control mode, the current is reduced. To disable this, set `axis.controller.enable_current_mode_vel_limit = False`.
+Note: If you exceed `vel_limit` in torque control mode, the current is reduced. To disable this, set `axis.controller.enable_current_mode_vel_limit = False`.
 
 ## Watchdog Timer
 Each axis has a configurable watchdog timer that can stop the motors if the
