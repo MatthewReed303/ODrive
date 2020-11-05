@@ -194,7 +194,7 @@ def test_watchdog(axis, feed_func, logger: Logger):
         
     logger.debug('letting watchdog expire...')
     time.sleep(1.3) # let the watchdog expire
-    test_assert_eq(axis.error, errors.axis.ERROR_WATCHDOG_TIMER_EXPIRED)
+    test_assert_eq(axis.error, AXIS_ERROR_WATCHDOG_TIMER_EXPIRED)
 
 # Test Components -------------------------------------------------------------#
 
@@ -794,7 +794,7 @@ if args.setup_host:
         if not os.path.isfile('/usr/share/arduino/hardware/tools/teensy_post_compile_old'):
             os.rename('/usr/share/arduino/hardware/tools/teensy_post_compile', '/usr/share/arduino/hardware/tools/teensy_post_compile_old')
         with open('/usr/share/arduino/hardware/tools/teensy_post_compile', 'w') as scr:
-            scr.write('#!/bin/bash\n')
+            scr.write('#!/usr/bin/env bash\n')
             scr.write('if [ "$ARDUINO_COMPILE_DESTINATION" != "" ]; then\n')
             scr.write('  cp -r ${2#-path=}/*.ino.hex ${ARDUINO_COMPILE_DESTINATION}\n')
             scr.write('fi\n')

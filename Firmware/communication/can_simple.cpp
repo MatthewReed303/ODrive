@@ -4,7 +4,7 @@
 
 #include <cstring>
 
-static const uint8_t NUM_NODE_ID_BITS = 6;
+static constexpr uint8_t NUM_NODE_ID_BITS = 6;
 static constexpr uint8_t NUM_CMD_ID_BITS = 11 - NUM_NODE_ID_BITS;
 
 void CANSimple::handle_can_message(can_Message_t& msg) {
@@ -82,8 +82,8 @@ void CANSimple::handle_can_message(can_Message_t& msg) {
             case MSG_SET_INPUT_VEL:
                 set_input_vel_callback(axis, msg);
                 break;
-            case MSG_SET_INPUT_CURRENT:
-                set_input_current_callback(axis, msg);
+            case MSG_SET_INPUT_TORQUE:
+                set_input_torque_callback(axis, msg);
                 break;
             case MSG_SET_CONTROLLER_MODES:
                 set_controller_modes_callback(axis, msg);
@@ -94,8 +94,8 @@ void CANSimple::handle_can_message(can_Message_t& msg) {
             case MSG_START_ANTICOGGING:
                 start_anticogging_callback(axis, msg);
                 break;
-            case MSG_SET_TRAJ_A_PER_CSS:
-                set_traj_A_per_css_callback(axis, msg);
+            case MSG_SET_TRAJ_INERTIA:
+                set_traj_inertia_callback(axis, msg);
                 break;
             case MSG_SET_TRAJ_ACCEL_LIMITS:
                 set_traj_accel_limits_callback(axis, msg);
@@ -188,7 +188,7 @@ void CANSimple::set_axis_nodeid_callback(Axis* axis, can_Message_t& msg) {
 }
 
 void CANSimple::set_axis_requested_state_callback(Axis* axis, can_Message_t& msg) {
-    axis->requested_state_ = static_cast<Axis::State_t>(can_getSignal<int32_t>(msg, 0, 16, true));
+    axis->requested_state_ = static_cast<Axis::AxisState>(can_getSignal<int32_t>(msg, 0, 16, true));
 }
 void CANSimple::set_axis_startup_config_callback(Axis* axis, can_Message_t& msg) {
     // Not Implemented
@@ -279,24 +279,24 @@ void CANSimple::get_encoder_count_callback(Axis* axis, can_Message_t& msg) {
 }
 
 void CANSimple::set_input_pos_callback(Axis* axis, can_Message_t& msg) {
-    axis->controller_.input_pos_ = can_getSignal<int32_t>(msg, 0, 32, true);
-    axis->controller_.input_vel_ = can_getSignal<int16_t>(msg, 32, 16, true, 0.1f, 0);
-    axis->controller_.input_current_ = can_getSignal<int16_t>(msg, 48, 16, true, 0.01f, 0);
+    axis->controller_.input_pos_ = can_getSignal<float>(msg, 0, 32, true);
+    axis->controller_.input_vel_ = can_getSignal<int16_t>(msg, 32, 16, true, 0.001f, 0);
+    axis->controller_.input_torque_ = can_getSignal<int16_t>(msg, 48, 16, true, 0.001f, 0);
     axis->controller_.input_pos_updated();
 }
 
 void CANSimple::set_input_vel_callback(Axis* axis, can_Message_t& msg) {
-    axis->controller_.input_vel_ = can_getSignal<int32_t>(msg, 0, 32, true, 0.01f, 0.0f);
-    axis->controller_.input_current_ = can_getSignal<int16_t>(msg, 32, 16, true, 0.01f, 0.0f);
+    axis->controller_.input_vel_ = can_getSignal<float>(msg, 0, 32, true);
+    axis->controller_.input_torque_ = can_getSignal<float>(msg, 32, 32, true);
 }
 
-void CANSimple::set_input_current_callback(Axis* axis, can_Message_t& msg) {
-    axis->controller_.input_current_ = can_getSignal<int32_t>(msg, 0, 32, true, 0.01f, 0);
+void CANSimple::set_input_torque_callback(Axis* axis, can_Message_t& msg) {
+    axis->controller_.input_torque_ = can_getSignal<float>(msg, 0, 32, true);
 }
 
 void CANSimple::set_controller_modes_callback(Axis* axis, can_Message_t& msg) {
-    axis->controller_.config_.control_mode = static_cast<Controller::ControlMode_t>(can_getSignal<int32_t>(msg, 0, 32, true));
-    axis->controller_.config_.input_mode = static_cast<Controller::InputMode_t>(can_getSignal<int32_t>(msg, 32, 32, true));
+    axis->controller_.config_.control_mode = static_cast<Controller::ControlMode>(can_getSignal<int32_t>(msg, 0, 32, true));
+    axis->controller_.config_.input_mode = static_cast<Controller::InputMode>(can_getSignal<int32_t>(msg, 32, 32, true));
 }
 
 void CANSimple::set_vel_limit_callback(Axis* axis, can_Message_t& msg) {
@@ -308,15 +308,15 @@ void CANSimple::start_anticogging_callback(Axis* axis, can_Message_t& msg) {
 }
 
 void CANSimple::set_traj_vel_limit_callback(Axis* axis, can_Message_t& msg) {
-    axis->trap_.config_.vel_limit = can_getSignal<float>(msg, 0, 32, true);
+    axis->trap_traj_.config_.vel_limit = can_getSignal<float>(msg, 0, 32, true);
 }
 
 void CANSimple::set_traj_accel_limits_callback(Axis* axis, can_Message_t& msg) {
-    axis->trap_.config_.accel_limit = can_getSignal<float>(msg, 0, 32, true);
-    axis->trap_.config_.decel_limit = can_getSignal<float>(msg, 32, 32, true);
+    axis->trap_traj_.config_.accel_limit = can_getSignal<float>(msg, 0, 32, true);
+    axis->trap_traj_.config_.decel_limit = can_getSignal<float>(msg, 32, 32, true);
 }
 
-void CANSimple::set_traj_A_per_css_callback(Axis* axis, can_Message_t& msg) {
+void CANSimple::set_traj_inertia_callback(Axis* axis, can_Message_t& msg) {
     axis->controller_.config_.inertia = can_getSignal<float>(msg, 0, 32, true);
 }
 

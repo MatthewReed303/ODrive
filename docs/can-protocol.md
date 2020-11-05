@@ -47,14 +47,14 @@ CMD ID | Name | Sender | Signals | Start byte | Signal Type | Bits | Factor | Of
 0x009 | Get Encoder Estimates\* | Master | Encoder Pos Estimate<br>Encoder Vel Estimate | 0<br>4 | IEEE 754 Float<br>IEEE 754 Float | 32<br>32 | 1<br>1 | 0<br>0 | Intel<br>Intel
 0x00A | Get Encoder Count\* | Master | Encoder Shadow Count<br>Encoder Count in CPR | 0<br>4 | Signed Int<br>Signed Int | 32<br>32 | 1<br>1 | 0<br>0 | Intel<br>Intel
 0x00B | Set Controller Modes | Master | Control Mode<br>Input Mode | 0<br>4 | Signed Int<br>Signed Int | 32<br>32 | 1<br>1 | 0<br>0 | Intel<br>Intel
-0x00C | Set Input Pos | Master | Input Pos<br>Vel FF<br>Current FF | 0<br>4<br>6 | Signed Int<br>Signed Int<br>Signed Int | 32<br>16<br>16 | 1<br>0.1<br>0.01 | 0<br>0<br>0 | Intel<br>Intel<br>Intel
-0x00D | Set Input Vel | Master | Input Vel<br>Current FF | 0<br>4 | Signed Int<br>Signed Int | 32<br>32 | 0.01<br>0.01 | 0<br>0 | Intel<br>Intel
-0x00E | Set Input Current | Master | Input Current | 0 |  Signed Int | 32 | 0.01 | 0 | Intel
+0x00C | Set Input Pos | Master | Input Pos<br>Vel FF<br>Torque FF | 0<br>4<br>6 | IEEE 754 Float<br>Signed Int<br>Signed Int | 32<br>16<br>16 | 1<br>0.001<br>0.001 | 0<br>0<br>0 | Intel<br>Intel<br>Intel
+0x00D | Set Input Vel | Master | Input Vel<br>Torque FF | 0<br>4 | IEEE 754 Float<br>IEEE 754 Float | 32<br>32 | 1<br>1 | 0<br>0 | Intel<br>Intel
+0x00E | Set Input Torque | Master | Input Torque | 0 |  IEEE 754 Float | 32 | 1 | 0 | Intel
 0x00F | Set Velocity Limit | Master | Velocity Limit | 0 | IEEE 754 Float | 32 | 1 | 0 | Intel
 0x010 | Start Anticogging | Master | - | - | - | - | - | - | -
 0x011 | Set Traj Vel Limit | Master | Traj Vel Limit | 0 | IEEE 754 Float | 32 | 1 | 0 | Intel
 0x012 | Set Traj Accel Limits | Master | Traj Accel Limit<br>Traj Decel Limit | 0<br>4 | IEEE 754 Float<br>IEEE 754 Float | 32<br>32 | 1<br>1 | 0<br>0 | Intel<br>Intel
-0x013 | Set Traj A per Count / s^2 | Master | Traj A per CSS | 0 | IEEE 754 Float | 32 | 1 | 0 | Intel
+0x013 | Set Traj Inertia | Master | Traj Inertia | 0 | IEEE 754 Float | 32 | 1 | 0 | Intel
 0x014 | Get IQ\* | Axis | Iq Setpoint<br>Iq Measured | 0<br>4 | IEEE 754 Float<br>IEEE 754 Float | 32<br>32 | 1<br>1 | 0<br>0 | Intel<br>Intel
 0x015 | Get Sensorless Estimates\* | Master | Sensorless Pos Estimate<br>Sensorless Vel Estimate | 0<br>4 | IEEE 754 Float<br>IEEE 754 Float | 32<br>32 | 1<br>1 | 0<br>0 | Intel<br>Intel
 0x016 | Reboot ODrive | Master\*\*\* | - | - | - | - | - | - | -
@@ -73,7 +73,7 @@ Configuration of the CAN parameters should be done via USB before putting the de
 
 To set the desired baud rate, use `<odrv>.can.set_baud_rate(<value>)`.  The baud rate can be done without rebooting the device.  If you'd like to keep the baud rate, simply call `<odrv>.save_configuration()` before rebooting.
 
-Each axis looks like a separate node on the bus. Thus, they both have the two properties `can_node_id` and `can_node_id_extended`. The node ID can be from 0 to 63 (0x3F) inclusive, or, if extended CAN IDs are used, from 0 to 16777215 (0xFFFFFF).
+Each axis looks like a separate node on the bus. Thus, they both have the two properties `can_node_id` and `can_node_id_extended`. The node ID can be from 0 to 63 (0x3F) inclusive, or, if extended CAN IDs are used, from 0 to 16777215 (0xFFFFFF). If you want to connect more than one ODrive on a CAN bus, you must set different node IDs for the second ODrive or they will conflict and crash the bus.
 
 ### Example Configuration
 

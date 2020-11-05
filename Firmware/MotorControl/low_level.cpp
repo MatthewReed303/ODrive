@@ -28,8 +28,8 @@
 /* Private macros ------------------------------------------------------------*/
 /* Private typedef -----------------------------------------------------------*/
 /* Global constant data ------------------------------------------------------*/
-const float adc_full_scale = (float)(1 << 12);
-const float adc_ref_voltage = 3.3f;
+constexpr float adc_full_scale = static_cast<float>(1UL << 12UL);
+constexpr float adc_ref_voltage = 3.3f;
 /* Global variables ----------------------------------------------------------*/
 
 // This value is updated by the DC-bus reading ADC.
@@ -84,7 +84,7 @@ static uint16_t GPIO_port_samples [2][num_GPIO];
 */
 
 // @brief Floats ALL phases immediately and disarms both motors and the brake resistor.
-void low_level_fault(Motor::Error_t error) {
+void low_level_fault(Motor::Error error) {
     // Disable all motors NOW!
     for (size_t i = 0; i < AXIS_COUNT; ++i) {
         safety_critical_disarm_motor_pwm(axes[i]->motor_);
@@ -390,8 +390,16 @@ void start_general_purpose_adc() {
 //  21000kHz / (15+26) / 16 = 32kHz
 // The true frequency is slightly lower because of the injected vbus
 // measurements
-float get_adc_voltage(GPIO_TypeDef* GPIO_port, uint16_t GPIO_pin) {
-    uint32_t channel = UINT32_MAX;
+float get_adc_voltage(const GPIO_TypeDef* const GPIO_port, uint16_t GPIO_pin) {
+    const uint16_t channel = channel_from_gpio(GPIO_port, GPIO_pin);
+    return get_adc_voltage_channel(channel);
+}
+
+// @brief Given a GPIO_port and pin return the associated adc_channel.
+// returns UINT16_MAX if there is no adc_channel;
+uint16_t channel_from_gpio(const GPIO_TypeDef* const GPIO_port, uint16_t GPIO_pin)
+{
+    uint16_t channel = UINT16_MAX;
     if (GPIO_port == GPIOA) {
         if (GPIO_pin == GPIO_PIN_0)
             channel = 0;
@@ -428,6 +436,13 @@ float get_adc_voltage(GPIO_TypeDef* GPIO_port, uint16_t GPIO_pin) {
         else if (GPIO_pin == GPIO_PIN_5)
             channel = 15;
     }
+    return channel;
+}
+
+// @brief Given an adc channel return the measured voltage.
+// returns NaN if the channel is not valid.
+float get_adc_voltage_channel(uint16_t channel)
+{
     if (channel < ADC_CHANNEL_COUNT)
         return ((float)adc_measurements_[channel]) * (adc_ref_voltage / adc_full_scale);
     else
@@ -439,7 +454,7 @@ float get_adc_voltage(GPIO_TypeDef* GPIO_port, uint16_t GPIO_pin) {
 //--------------------------------
 
 void vbus_sense_adc_cb(ADC_HandleTypeDef* hadc, bool injected) {
-    static const float voltage_scale = adc_ref_voltage * VBUS_S_DIVIDER_RATIO / adc_full_scale;
+    constexpr float voltage_scale = adc_ref_voltage * VBUS_S_DIVIDER_RATIO / adc_full_scale;
     // Only one conversion in sequence, so only rank1
     uint32_t ADCValue = HAL_ADCEx_InjectedGetValue(hadc, ADC_INJECTED_RANK_1);
     vbus_voltage = ADCValue * voltage_scale;
@@ -475,10 +490,10 @@ static void decode_hall_samples(Encoder& enc, uint16_t GPIO_samples[num_GPIO]) {
 }
 
 // This is the callback from the ADC that we expect after the PWM has triggered an ADC conversion.
-// TODO: Document how the phasing is done, link to timing diagram
+// Timing diagram: Firmware/timing_diagram_v3.png
 void pwm_trig_adc_cb(ADC_HandleTypeDef* hadc, bool injected) {
 #define calib_tau 0.2f  //@TOTO make more easily configurable
-    static const float calib_filter_k = CURRENT_MEAS_PERIOD / calib_tau;
+    constexpr float calib_filter_k = CURRENT_MEAS_PERIOD / calib_tau;
 
     // Ensure ADCs are expected ones to simplify the logic below
     if (!(hadc == &hadc2 || hadc == &hadc3)) {
@@ -498,9 +513,9 @@ void pwm_trig_adc_cb(ADC_HandleTypeDef* hadc, bool injected) {
 
     // Check the timing of the sequencing
     if (current_meas_not_DC_CAL)
-        axis.motor_.log_timing(Motor::TIMING_LOG_ADC_CB_I);
+        axis.motor_.log_timing(TIMING_LOG_ADC_CB_I);
     else
-        axis.motor_.log_timing(Motor::TIMING_LOG_ADC_CB_DC);
+        axis.motor_.log_timing(TIMING_LOG_ADC_CB_DC);
 
     bool update_timings = false;
     if (hadc == &hadc2) {
@@ -613,11 +628,11 @@ void update_brake_current() {
     }
     
     // Don't start braking until -Ibus > regen_current_allowed
-    float brake_current = -Ibus_sum - board_config.max_regen_current;
-    float brake_duty = brake_current * board_config.brake_resistance / vbus_voltage;
+    float brake_current = -Ibus_sum - odrv.config_.max_regen_current;
+    float brake_duty = brake_current * odrv.config_.brake_resistance / vbus_voltage;
     
-    if (board_config.enable_dc_bus_overvoltage_ramp && (board_config.brake_resistance > 0.0f) && (board_config.dc_bus_overvoltage_ramp_start < board_config.dc_bus_overvoltage_ramp_end)) {
-        brake_duty += std::fmax((vbus_voltage - board_config.dc_bus_overvoltage_ramp_start) / (board_config.dc_bus_overvoltage_ramp_end - board_config.dc_bus_overvoltage_ramp_start), 0.0f);
+    if (odrv.config_.enable_dc_bus_overvoltage_ramp && (odrv.config_.brake_resistance > 0.0f) && (odrv.config_.dc_bus_overvoltage_ramp_start < odrv.config_.dc_bus_overvoltage_ramp_end)) {
+        brake_duty += std::fmax((vbus_voltage - odrv.config_.dc_bus_overvoltage_ramp_start) / (odrv.config_.dc_bus_overvoltage_ramp_end - odrv.config_.dc_bus_overvoltage_ramp_start), 0.0f);
     }
 
     if (std::isnan(brake_duty)) {
@@ -634,15 +649,15 @@ void update_brake_current() {
     brake_duty = std::clamp(brake_duty, 0.0f, 0.95f);
 
     // Special handling to avoid the case 0.0/0.0 == NaN.
-    Ibus_sum += brake_duty ? (brake_duty * vbus_voltage / board_config.brake_resistance) : 0.0f;
+    Ibus_sum += brake_duty ? (brake_duty * vbus_voltage / odrv.config_.brake_resistance) : 0.0f;
 
-    ibus_ = Ibus_sum;
+    ibus_ += odrv.ibus_report_filter_k_ * (Ibus_sum - ibus_);
 
-    if (Ibus_sum > board_config.dc_max_positive_current) {
+    if (Ibus_sum > odrv.config_.dc_max_positive_current) {
         low_level_fault(Motor::ERROR_DC_BUS_OVER_CURRENT);
         return;
     }
-    if (Ibus_sum < board_config.dc_max_negative_current) {
+    if (Ibus_sum < odrv.config_.dc_max_negative_current) {
         low_level_fault(Motor::ERROR_DC_BUS_OVER_REGEN_CURRENT);
         return;
     }
@@ -654,6 +669,121 @@ void update_brake_current() {
 }
 
 
+/* RC PWM input --------------------------------------------------------------*/
+
+// @brief Returns the ODrive GPIO number for a given
+// TIM2 or TIM5 input capture channel number.
+int tim_2_5_channel_num_to_gpio_num(int channel) {
+#if HW_VERSION_MAJOR == 3 && HW_VERSION_MINOR >= 3
+    if (channel >= 1 && channel <= 4) {
+        // the channel numbers just happen to coincide with
+        // the GPIO numbers
+        return channel;
+    } else {
+        return -1;
+    }
+#else
+    // Only ch4 is available on v3.2
+    if (channel == 4) {
+        return 4;
+    } else {
+        return -1;
+    }
+#endif
+}
+// @brief Returns the TIM2 or TIM5 channel number
+// for a given GPIO number.
+uint32_t gpio_num_to_tim_2_5_channel(int gpio_num) {
+#if HW_VERSION_MAJOR == 3 && HW_VERSION_MINOR >= 3
+    switch (gpio_num) {
+        case 1: return TIM_CHANNEL_1;
+        case 2: return TIM_CHANNEL_2;
+        case 3: return TIM_CHANNEL_3;
+        case 4: return TIM_CHANNEL_4;
+        default: return 0;
+    }
+#else
+    // Only ch4 is available on v3.2
+    if (gpio_num == 4) {
+        return TIM_CHANNEL_4;
+    } else {
+        return 0;
+    }
+#endif
+}
+
+void pwm_in_init() {
+    GPIO_InitTypeDef GPIO_InitStruct;
+    GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+    GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+    GPIO_InitStruct.Alternate = GPIO_AF2_TIM5;
+
+    TIM_IC_InitTypeDef sConfigIC;
+    sConfigIC.ICPolarity = TIM_INPUTCHANNELPOLARITY_BOTHEDGE;
+    sConfigIC.ICSelection = TIM_ICSELECTION_DIRECTTI;
+    sConfigIC.ICPrescaler = TIM_ICPSC_DIV1;
+    sConfigIC.ICFilter = 15;
+
+#if HW_VERSION_MAJOR == 3 && HW_VERSION_MINOR >= 3
+    for (int gpio_num = 1; gpio_num <= 4; ++gpio_num) {
+#else
+    int gpio_num = 4; {
+#endif
+        if (fibre::is_endpoint_ref_valid(odrv.config_.pwm_mappings[gpio_num - 1].endpoint)) {
+            GPIO_InitStruct.Pin = get_gpio_pin_by_pin(gpio_num);
+            HAL_GPIO_DeInit(get_gpio_port_by_pin(gpio_num), get_gpio_pin_by_pin(gpio_num));
+            HAL_GPIO_Init(get_gpio_port_by_pin(gpio_num), &GPIO_InitStruct);
+            HAL_TIM_IC_ConfigChannel(&htim5, &sConfigIC, gpio_num_to_tim_2_5_channel(gpio_num));
+            HAL_TIM_IC_Start_IT(&htim5, gpio_num_to_tim_2_5_channel(gpio_num));
+        }
+    }
+}
+
+//TODO: These expressions have integer division by 1MHz, so it will be incorrect for clock speeds of not-integer MHz
+#define TIM_2_5_CLOCK_HZ        TIM_APB1_CLOCK_HZ
+#define PWM_MIN_HIGH_TIME          ((TIM_2_5_CLOCK_HZ / 1000000UL) * 1000UL) // 1ms high is considered full reverse
+#define PWM_MAX_HIGH_TIME          ((TIM_2_5_CLOCK_HZ / 1000000UL) * 2000UL) // 2ms high is considered full forward
+#define PWM_MIN_LEGAL_HIGH_TIME    ((TIM_2_5_CLOCK_HZ / 1000000UL) * 500UL) // ignore high periods shorter than 0.5ms
+#define PWM_MAX_LEGAL_HIGH_TIME    ((TIM_2_5_CLOCK_HZ / 1000000UL) * 2500UL) // ignore high periods longer than 2.5ms
+#define PWM_INVERT_INPUT        false
+
+void handle_pulse(int gpio_num, uint32_t high_time) {
+    if (high_time < PWM_MIN_LEGAL_HIGH_TIME || high_time > PWM_MAX_LEGAL_HIGH_TIME)
+        return;
+
+    if (high_time < PWM_MIN_HIGH_TIME)
+        high_time = PWM_MIN_HIGH_TIME;
+    if (high_time > PWM_MAX_HIGH_TIME)
+        high_time = PWM_MAX_HIGH_TIME;
+    float fraction = (float)(high_time - PWM_MIN_HIGH_TIME) / (float)(PWM_MAX_HIGH_TIME - PWM_MIN_HIGH_TIME);
+    float value = odrv.config_.pwm_mappings[gpio_num - 1].min +
+                  (fraction * (odrv.config_.pwm_mappings[gpio_num - 1].max - odrv.config_.pwm_mappings[gpio_num - 1].min));
+
+    fibre::set_endpoint_from_float(odrv.config_.pwm_mappings[gpio_num - 1].endpoint, value);
+}
+
+void pwm_in_cb(int channel, uint32_t timestamp) {
+    static uint32_t last_timestamp[GPIO_COUNT] = { 0 };
+    static bool last_pin_state[GPIO_COUNT] = { false };
+    static bool last_sample_valid[GPIO_COUNT] = { false };
+
+    int gpio_num = tim_2_5_channel_num_to_gpio_num(channel);
+    if (gpio_num < 1 || gpio_num > GPIO_COUNT)
+        return;
+    bool current_pin_state = HAL_GPIO_ReadPin(get_gpio_port_by_pin(gpio_num), get_gpio_pin_by_pin(gpio_num)) != GPIO_PIN_RESET;
+
+    if (last_sample_valid[gpio_num - 1]
+        && (last_pin_state[gpio_num - 1] != PWM_INVERT_INPUT)
+        && (current_pin_state == PWM_INVERT_INPUT)) {
+        handle_pulse(gpio_num, timestamp - last_timestamp[gpio_num - 1]);
+    }
+
+    last_timestamp[gpio_num - 1] = timestamp;
+    last_pin_state[gpio_num - 1] = current_pin_state;
+    last_sample_valid[gpio_num - 1] = true;
+}
+
 
 /* Analog speed control input */
 
@@ -661,16 +791,16 @@ static void update_analog_endpoint(const struct PWMMapping_t *map, int gpio)
 {
     float fraction = get_adc_voltage(get_gpio_port_by_pin(gpio), get_gpio_pin_by_pin(gpio)) / 3.3f;
     float value = map->min + (fraction * (map->max - map->min));
-    get_endpoint(map->endpoint)->set_from_float(value);
+    fibre::set_endpoint_from_float(map->endpoint, value);
 }
 
 static void analog_polling_thread(void *)
 {
     while (true) {
         for (int i = 0; i < GPIO_COUNT; i++) {
-            struct PWMMapping_t *map = &board_config.analog_mappings[i];
+            struct PWMMapping_t *map = &odrv.config_.analog_mappings[i];
 
-            if (is_endpoint_ref_valid(map->endpoint))
+            if (fibre::is_endpoint_ref_valid(map->endpoint))
                 update_analog_endpoint(map, i + 1);
         }
         osDelay(10);

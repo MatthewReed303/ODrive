@@ -61,7 +61,7 @@ public:
         // Loop to ensure all bytes get sent
         while (length) {
             size_t chunk = length < USB_TX_DATA_SIZE ? length : USB_TX_DATA_SIZE;
-            if (output_.process_packet(buffer, length) != 0)
+            if (output_.process_packet(buffer, chunk) != 0)
                 return -1;
             buffer += chunk;
             length -= chunk;
@@ -127,7 +127,7 @@ static void usb_server_thread(void * ctx) {
             // CDC Interface
             if (CDC_interface.data_pending) {
                 CDC_interface.data_pending = false;
-                if (board_config.enable_ascii_protocol_on_usb) {
+                if (odrv.config_.enable_ascii_protocol_on_usb) {
                     ASCII_protocol_parse_stream(CDC_interface.rx_buf,
                             CDC_interface.rx_len, usb_stream_output);
                 } else {

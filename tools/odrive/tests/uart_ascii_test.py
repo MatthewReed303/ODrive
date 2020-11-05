@@ -89,32 +89,41 @@ class TestUartAscii():
             response = int(ser.readline().strip())
             test_assert_eq(response, 12345)
 
+            # Test custom setter (aka property write hook)
+            odrive.handle.axis0.motor.config.phase_resistance = 1
+            odrive.handle.axis0.motor.config.phase_inductance = 1
+            odrive.handle.axis0.motor.config.current_control_bandwidth = 1000
+            old_gain = odrive.handle.axis0.motor.current_control.p_gain
+            test_assert_eq(old_gain, 1000, accuracy=0.0001) # must be non-zero for subsequent check to work
+            ser.write('w axis0.motor.config.current_control_bandwidth {}\n'.format(odrive.handle.axis0.motor.config.current_control_bandwidth / 2).encode('ascii'))
+            test_assert_eq(ser.readline(), b'')
+            test_assert_eq(odrive.handle.axis0.motor.current_control.p_gain, old_gain / 2, accuracy=0.0001)
 
             # Test 'c', 'v', 'p', 'q' and 'f' commands
 
-            odrive.handle.axis0.controller.input_current = 0
+            odrive.handle.axis0.controller.input_torque = 0
             ser.write(b'c 0 12.5\n')
             test_assert_eq(ser.readline(), b'')
-            test_assert_eq(odrive.handle.axis0.controller.input_current, 12.5, accuracy=0.001)
-            test_assert_eq(odrive.handle.axis0.controller.config.control_mode, CTRL_MODE_CURRENT_CONTROL)
+            test_assert_eq(odrive.handle.axis0.controller.input_torque, 12.5, accuracy=0.001)
+            test_assert_eq(odrive.handle.axis0.controller.config.control_mode, CONTROL_MODE_TORQUE_CONTROL)
 
             odrive.handle.axis0.controller.input_vel = 0
-            odrive.handle.axis0.controller.input_current = 0
+            odrive.handle.axis0.controller.input_torque = 0
             ser.write(b'v 0 567.8 12.5\n')
             test_assert_eq(ser.readline(), b'')
             test_assert_eq(odrive.handle.axis0.controller.input_vel, 567.8, accuracy=0.001)
-            test_assert_eq(odrive.handle.axis0.controller.input_current, 12.5, accuracy=0.001)
-            test_assert_eq(odrive.handle.axis0.controller.config.control_mode, CTRL_MODE_VELOCITY_CONTROL)
+            test_assert_eq(odrive.handle.axis0.controller.input_torque, 12.5, accuracy=0.001)
+            test_assert_eq(odrive.handle.axis0.controller.config.control_mode, CONTROL_MODE_VELOCITY_CONTROL)
 
             odrive.handle.axis0.controller.input_pos = 0
             odrive.handle.axis0.controller.input_vel = 0
-            odrive.handle.axis0.controller.input_current = 0
+            odrive.handle.axis0.controller.input_torque = 0
             ser.write(b'p 0 123.4 567.8 12.5\n')
             test_assert_eq(ser.readline(), b'')
             test_assert_eq(odrive.handle.axis0.controller.input_pos, 123.4, accuracy=0.001)
             test_assert_eq(odrive.handle.axis0.controller.input_vel, 567.8, accuracy=0.001)
-            test_assert_eq(odrive.handle.axis0.controller.input_current, 12.5, accuracy=0.001)
-            test_assert_eq(odrive.handle.axis0.controller.config.control_mode, CTRL_MODE_POSITION_CONTROL)
+            test_assert_eq(odrive.handle.axis0.controller.input_torque, 12.5, accuracy=0.001)
+            test_assert_eq(odrive.handle.axis0.controller.config.control_mode, CONTROL_MODE_POSITION_CONTROL)
 
             odrive.handle.axis0.controller.input_pos = 0
             odrive.handle.axis0.controller.config.vel_limit = 0
@@ -123,8 +132,8 @@ class TestUartAscii():
             test_assert_eq(ser.readline(), b'')
             test_assert_eq(odrive.handle.axis0.controller.input_pos, 123.4, accuracy=0.001)
             test_assert_eq(odrive.handle.axis0.controller.config.vel_limit, 567.8, accuracy=0.001)
-            test_assert_eq(odrive.handle.axis0.motor.config.current_lim, 12.5, accuracy=0.001)
-            test_assert_eq(odrive.handle.axis0.controller.config.control_mode, CTRL_MODE_POSITION_CONTROL)
+            test_assert_eq(odrive.handle.axis0.motor.config.torque_lim, 12.5, accuracy=0.001)
+            test_assert_eq(odrive.handle.axis0.controller.config.control_mode, CONTROL_MODE_POSITION_CONTROL)
 
             ser.write(b'f 0\n')
             response = ser.readline().strip()

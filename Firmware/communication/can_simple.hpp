@@ -20,12 +20,12 @@ class CANSimple {
         MSG_SET_CONTROLLER_MODES,
         MSG_SET_INPUT_POS,
         MSG_SET_INPUT_VEL,
-        MSG_SET_INPUT_CURRENT,
+        MSG_SET_INPUT_TORQUE,
         MSG_SET_VEL_LIMIT,
         MSG_START_ANTICOGGING,
         MSG_SET_TRAJ_VEL_LIMIT,
         MSG_SET_TRAJ_ACCEL_LIMITS,
-        MSG_SET_TRAJ_A_PER_CSS,
+        MSG_SET_TRAJ_INERTIA,
         MSG_GET_IQ,
         MSG_GET_SENSORLESS_ESTIMATES,
         MSG_RESET_ODRIVE,
@@ -51,13 +51,13 @@ class CANSimple {
     static void get_encoder_count_callback(Axis* axis, can_Message_t& msg);
     static void set_input_pos_callback(Axis* axis, can_Message_t& msg);
     static void set_input_vel_callback(Axis* axis, can_Message_t& msg);
-    static void set_input_current_callback(Axis* axis, can_Message_t& msg);
+    static void set_input_torque_callback(Axis* axis, can_Message_t& msg);
     static void set_controller_modes_callback(Axis* axis, can_Message_t& msg);
     static void set_vel_limit_callback(Axis* axis, can_Message_t& msg);
     static void start_anticogging_callback(Axis* axis, can_Message_t& msg);
     static void set_traj_vel_limit_callback(Axis* axis, can_Message_t& msg);
     static void set_traj_accel_limits_callback(Axis* axis, can_Message_t& msg);
-    static void set_traj_A_per_css_callback(Axis* axis, can_Message_t& msg);
+    static void set_traj_inertia_callback(Axis* axis, can_Message_t& msg);
     static void get_iq_callback(Axis* axis, can_Message_t& msg);
     static void get_sensorless_estimates_callback(Axis* axis, can_Message_t& msg);
     static void get_vbus_voltage_callback(Axis* axis, can_Message_t& msg);
