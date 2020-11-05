@@ -5,51 +5,41 @@
 
 #include "odrive_main.h"
 #include "utils.hpp"
-#include "gpio_utils.hpp"
 #include "communication/interface_can.hpp"
 
 Axis::Axis(int axis_num,
-           const AxisHardwareConfig_t& hw_config,
-           Config_t& config,
+           uint16_t default_step_gpio_pin,
+           uint16_t default_dir_gpio_pin,
+           osPriority thread_priority,
            Encoder& encoder,
            SensorlessEstimator& sensorless_estimator,
            Controller& controller,
-           OnboardThermistorCurrentLimiter& fet_thermistor,
-           OffboardThermistorCurrentLimiter& motor_thermistor,
            Motor& motor,
            TrapezoidalTrajectory& trap,
            Endstop& min_endstop,
-           Endstop& max_endstop)
+           Endstop& max_endstop,
+           MechanicalBrake& mechanical_brake)
     : axis_num_(axis_num),
-      hw_config_(hw_config),
-      config_(config),
+      default_step_gpio_pin_(default_step_gpio_pin),
+      default_dir_gpio_pin_(default_dir_gpio_pin),
+      thread_priority_(thread_priority),
       encoder_(encoder),
       sensorless_estimator_(sensorless_estimator),
       controller_(controller),
-      fet_thermistor_(fet_thermistor),
-      motor_thermistor_(motor_thermistor),
       motor_(motor),
       trap_traj_(trap),
       min_endstop_(min_endstop),
       max_endstop_(max_endstop),
-      current_limiters_(make_array(
-          static_cast<CurrentLimiter*>(&fet_thermistor),
-          static_cast<CurrentLimiter*>(&motor_thermistor))),
-      thermistors_(make_array(
-          static_cast<ThermistorCurrentLimiter*>(&fet_thermistor),
-          static_cast<ThermistorCurrentLimiter*>(&motor_thermistor)))
+      mechanical_brake_(mechanical_brake)
 {
     encoder_.axis_ = this;
     sensorless_estimator_.axis_ = this;
     controller_.axis_ = this;
-    fet_thermistor_.axis_ = this;
-    motor_thermistor.axis_ = this;
     motor_.axis_ = this;
     trap_traj_.axis_ = this;
     min_endstop_.axis_ = this;
     max_endstop_.axis_ = this;
-    decode_step_dir_pins();
-    watchdog_feed();
+    mechanical_brake_.axis_ = this;
 }
 
 Axis::LockinConfig_t Axis::default_calibration() {
@@ -84,10 +74,24 @@ static void step_cb_wrapper(void* ctx) {
     reinterpret_cast<Axis*>(ctx)->step_cb();
 }
 
+bool Axis::apply_config() {
+    config_.parent = this;
+    decode_step_dir_pins();
+    watchdog_feed();
+    return true;
+}
+
+void Axis::clear_config() {
+    config_ = {};
+    config_.step_gpio_pin = default_step_gpio_pin_;
+    config_.dir_gpio_pin = default_dir_gpio_pin_;
+    config_.can.node_id = axis_num_;
+}
 
 // @brief Does Nothing
-void Axis::setup() {
+bool Axis::setup() {
     // Does nothing - Motor and encoder setup called separately.
+    return true;
 }
 
 static void run_state_machine_loop_wrapper(void* ctx) {
@@ -97,7 +101,7 @@ static void run_state_machine_loop_wrapper(void* ctx) {
 
 // @brief Starts run_state_machine_loop in a new thread
 void Axis::start_thread() {
-    osThreadDef(thread_def, run_state_machine_loop_wrapper, hw_config_.thread_priority, 0, stack_size_ / sizeof(StackType_t));
+    osThreadDef(thread_def, run_state_machine_loop_wrapper, thread_priority_, 0, stack_size_ / sizeof(StackType_t));
     thread_id_ = osThreadCreate(osThread(thread_def), this);
     thread_id_valid_ = true;
 }
@@ -117,48 +121,35 @@ bool Axis::wait_for_current_meas() {
 
 // step/direction interface
 void Axis::step_cb() {
-    const bool dir_pin = dir_port_->IDR & dir_pin_;
-    const int32_t dir = (-1 + 2 * dir_pin) * step_dir_active_;
-    controller_.input_pos_ += dir * config_.turns_per_step;
-    controller_.input_pos_updated();
-};
-
-void Axis::load_default_step_dir_pin_config(
-        const AxisHardwareConfig_t& hw_config, Config_t* config) {
-    config->step_gpio_pin = hw_config.step_gpio_pin;
-    config->dir_gpio_pin = hw_config.dir_gpio_pin;
-}
-
-void Axis::load_default_can_id(const int& id, Config_t& config){
-    config.can_node_id = id;
+    if (step_dir_active_) {
+        const bool dir_pin = dir_gpio_.read();
+        const float dir = dir_pin ? 1.0f : -1.0f;
+        controller_.input_pos_ += dir * config_.turns_per_step;
+        controller_.input_pos_updated();
+    }
 }
 
 void Axis::decode_step_dir_pins() {
-    step_port_ = get_gpio_port_by_pin(config_.step_gpio_pin);
-    step_pin_ = get_gpio_pin_by_pin(config_.step_gpio_pin);
-    dir_port_ = get_gpio_port_by_pin(config_.dir_gpio_pin);
-    dir_pin_ = get_gpio_pin_by_pin(config_.dir_gpio_pin);
+    step_gpio_ = get_gpio(config_.step_gpio_pin);
+    dir_gpio_ = get_gpio(config_.dir_gpio_pin);
 }
 
 // @brief (de)activates step/dir input
 void Axis::set_step_dir_active(bool active) {
     if (active) {
-        // Set up the direction GPIO as input
-        GPIO_InitTypeDef GPIO_InitStruct;
-        GPIO_InitStruct.Pin = dir_pin_;
-        GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-        GPIO_InitStruct.Pull = GPIO_NOPULL;
-        HAL_GPIO_Init(dir_port_, &GPIO_InitStruct);
-
         // Subscribe to rising edges of the step GPIO
-        GPIO_subscribe(step_port_, step_pin_, GPIO_PULLDOWN, step_cb_wrapper, this);
+        if (!step_gpio_.subscribe(true, false, step_cb_wrapper, this)) {
+            odrv.misconfigured_ = true;
+        }
 
         step_dir_active_ = true;
     } else {
         step_dir_active_ = false;
 
         // Unsubscribe from step GPIO
-        GPIO_unsubscribe(step_port_, step_pin_);
+        // TODO: if we change the GPIO while the subscription is active and then
+        // unsubscribe then the unsubscribe is for the wrong pin.
+        step_gpio_.unsubscribe();
     }
 }
 
@@ -176,18 +167,13 @@ bool Axis::do_checks() {
         error_ |= ERROR_DC_BUS_OVER_VOLTAGE;
 
     // Sub-components should use set_error which will propegate to this error_
-    for (ThermistorCurrentLimiter* thermistor : thermistors_) {
-        thermistor->do_checks();
-    }
+    motor_.effective_current_lim();
     motor_.do_checks();
-    // encoder_.do_checks();
-    // sensorless_estimator_.do_checks();
-    // controller_.do_checks();
 
     // Check for endstop presses
-    if (min_endstop_.config_.enabled && min_endstop_.get_state() && !(current_state_ == AXIS_STATE_HOMING)) {
+    if (min_endstop_.config_.enabled && min_endstop_.rose() && !(current_state_ == AXIS_STATE_HOMING)) {
         error_ |= ERROR_MIN_ENDSTOP_PRESSED;
-    } else if (max_endstop_.config_.enabled && max_endstop_.get_state() && !(current_state_ == AXIS_STATE_HOMING)) {
+    } else if (max_endstop_.config_.enabled && max_endstop_.rose() && !(current_state_ == AXIS_STATE_HOMING)) {
         error_ |= ERROR_MAX_ENDSTOP_PRESSED;
     }
 
@@ -197,15 +183,31 @@ bool Axis::do_checks() {
 // @brief Update all esitmators
 bool Axis::do_updates() {
     // Sub-components should use set_error which will propegate to this error_
-    for (ThermistorCurrentLimiter* thermistor : thermistors_) {
-        thermistor->update();
-    }
+
+
+    task_times_.encoder_update.beginTimer();
     encoder_.update();
+    task_times_.encoder_update.stopTimer();
+
+    task_times_.sensorless_update.beginTimer();
     sensorless_estimator_.update();
+    task_times_.sensorless_update.stopTimer();
+
+    task_times_.thermistor_update.beginTimer();
+    motor_.fet_thermistor_.update();
+    motor_.motor_thermistor_.update();
+    task_times_.thermistor_update.stopTimer();
+
+    task_times_.min_endstop_update.beginTimer();
     min_endstop_.update();
+    task_times_.min_endstop_update.stopTimer();
+
+    task_times_.max_endstop_update.beginTimer();
     max_endstop_.update();
+    task_times_.max_endstop_update.stopTimer();
+
     bool ret = check_for_errors();
-    odCAN->send_heartbeat(this);
+    odCAN->send_cyclic(*this);
     return ret;
 }
 
@@ -343,13 +345,18 @@ bool Axis::run_closed_loop_control_loop() {
     set_step_dir_active(config_.enable_step_dir);
     run_control_loop([this](){
         // Note that all estimators are updated in the loop prefix in run_control_loop
+        
+        task_times_.controller_update.beginTimer();
         float torque_setpoint;
         if (!controller_.update(&torque_setpoint))
             return error_ |= ERROR_CONTROLLER_FAILED, false;
+        task_times_.controller_update.stopTimer();
 
+        task_times_.motor_update.beginTimer();
         float phase_vel = (2*M_PI) * encoder_.vel_estimate_ * motor_.config_.pole_pairs;
         if (!motor_.update(torque_setpoint, encoder_.phase_, phase_vel))
             return false; // set_error should update axis.error_
+        task_times_.motor_update.stopTimer();
 
         return true;
     });
@@ -406,6 +413,7 @@ bool Axis::run_homing() {
     // Avoid integrator windup issues
     controller_.vel_integrator_torque_ = 0.0f;
 
+    // Driving toward the endstop
     run_control_loop([this](){
         // Note that all estimators are updated in the loop prefix in run_control_loop
         float torque_setpoint;
@@ -459,6 +467,7 @@ bool Axis::run_idle_loop() {
     // run_control_loop ignores missed modulation timing updates
     // if and only if we're in AXIS_STATE_IDLE
     safety_critical_disarm_motor_pwm(motor_);
+    mechanical_brake_.engage();
     set_step_dir_active(config_.enable_step_dir && config_.step_dir_always_on);
     run_control_loop([this]() {
         return true;
@@ -471,6 +480,7 @@ void Axis::run_state_machine_loop() {
 
     // arm!
     motor_.arm();
+    mechanical_brake_.release();
 
     for (;;) {
         // Load the task chain if a specific request is pending
@@ -572,6 +582,7 @@ void Axis::run_state_machine_loop() {
             case AXIS_STATE_IDLE: {
                 run_idle_loop();
                 status = motor_.arm(); // done with idling - try to arm the motor
+                mechanical_brake_.release();
             } break;
 
             default:

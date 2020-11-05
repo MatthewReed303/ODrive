@@ -2,7 +2,6 @@
 #define __INTERFACE_CAN_HPP
 
 #include <cmsis_os.h>
-#include <stm32f4xx_hal.h>
 #include "fibre/protocol.hpp"
 #include "odrive_main.h"
 #include "can_helpers.hpp"
@@ -36,14 +35,14 @@ class ODriveCAN : public ODriveIntf::CanIntf {
     volatile bool thread_id_valid_ = false;
     bool start_can_server();
     void can_server_thread();
-    void send_heartbeat(Axis *axis);
+    void send_cyclic(Axis& axis);
     void reinit_can();
 
     void set_error(Error error);
 
     // I/O Functions
     uint32_t available();
-    uint32_t write(can_Message_t &txmsg);
+    int32_t write(can_Message_t &txmsg);
     bool read(can_Message_t &rxmsg);
 
     ODriveCAN::Config_t &config_;

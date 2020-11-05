@@ -1,12 +1,13 @@
 # UART Interface
 
-The ODrive's UART interface is enabled by default (see `odrv0.config.enable_uart`). Currently it runs both the [Native Protocol](native-protocol) and the [ASCII Protocol](ascii-protocol) at the same time.
+The ODrive's UART0 interface is enabled by default with a baudrate of 115200 on the pins as shown in [Pinout](pinout).
 
-The baudrate is 115200 by default and can be changed using `odrv0.config.uart_baudrate`. Changes to the UART configuration require a reboot to take effect.
+To use UART connect it like this:
+
+* Tx of the ODrive <=> Rx of other device
+* Rx of the ODrive <=> Tx of other device
+* GND of the ODrive (use any GND pin on J3 of the ODrive) <=> GND of the other device
 
 The logic level of the ODrive is 3.3V. The GPIOs are 5V tolerant.
 
-Pinout:
-* GPIO 1: Tx (connect to Rx of other device)
-* GPIO 2: Rx (connect to Tx of other device)
-* GND: you must connect the grounds of the devices together. Use any GND pin on J3 of the ODrive.
+You can use `odrv0.config.uart0_baudrate` to change the baudrate and `odrv0.config.enable_uart0` to disable/reenable UART0. Currently the UART port runs both the [Native Protocol](native-protocol) and the [ASCII Protocol](ascii-protocol) at the same time.

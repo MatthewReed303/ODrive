@@ -1,9 +1,18 @@
 #ifndef __AXIS_HPP
 #define __AXIS_HPP
 
-#ifndef __ODRIVE_MAIN_H
-#error "This file should not be included directly. Include odrive_main.h instead."
-#endif
+class Axis;
+
+#include "encoder.hpp"
+#include "sensorless_estimator.hpp"
+#include "controller.hpp"
+#include "trapTraj.hpp"
+#include "endstop.hpp"
+#include "mechanical_brake.hpp"
+#include "low_level.h"
+#include "utils.hpp"
+#include "communication/interface_uart.h" // TODO: remove once uart_poll() is gone
+#include "taskTimer.hpp"
 
 #include <array>
 
@@ -21,9 +30,38 @@ public:
         bool finish_on_enc_idx = false;
     };
 
+    struct TaskTimes_t {
+        TaskTimer thermistor_update;
+        TaskTimer encoder_update;
+        TaskTimer sensorless_update;
+        TaskTimer min_endstop_update;
+        TaskTimer max_endstop_update;
+        TaskTimer axis_update;
+        TaskTimer axis_error_check;
+
+        TaskTimer controller_update;
+        TaskTimer motor_update;
+        TaskTimer update_handler;
+
+        TaskTimer brake_update;
+        TaskTimer adc_cb;
+        TaskTimer control_loop;
+        TaskTimer total;
+
+        TaskTimer uart_poll;
+        TaskTimer FOC_Current;
+    };
+
     static LockinConfig_t default_calibration();
     static LockinConfig_t default_sensorless();
     static LockinConfig_t default_lockin();
+
+    struct CANConfig_t {
+        uint32_t node_id = 0;
+        bool is_extended = false;
+        uint32_t heartbeat_rate_ms = 100;
+        uint32_t encoder_rate_ms = 10;
+    };
 
     struct Config_t {
         bool startup_motor_calibration = false;   //<! run motor calibration at startup, skip otherwise
@@ -53,9 +91,8 @@ public:
         LockinConfig_t calibration_lockin = default_calibration();
         LockinConfig_t sensorless_ramp = default_sensorless();
         LockinConfig_t general_lockin;
-        uint32_t can_node_id = 0; // Both axes will have the same id to start
-        bool can_node_id_extended = false;
-        uint32_t can_heartbeat_rate_ms = 100;
+
+        CANConfig_t can;
 
         // custom setters
         Axis* parent = nullptr;
@@ -67,24 +104,32 @@ public:
         bool is_homed = false;
     };
 
+    struct CAN_t {
+        uint32_t last_heartbeat = 0;
+        uint32_t last_encoder = 0;
+    };
+
     enum thread_signals {
         M_SIGNAL_PH_CURRENT_MEAS = 1u << 0
     };
 
     Axis(int axis_num,
-            const AxisHardwareConfig_t& hw_config,
-            Config_t& config,
+            uint16_t default_step_gpio_pin,
+            uint16_t default_dir_gpio_pin,
+            osPriority thread_priority,
             Encoder& encoder,
             SensorlessEstimator& sensorless_estimator,
             Controller& controller,
-            OnboardThermistorCurrentLimiter& fet_thermistor,
-            OffboardThermistorCurrentLimiter& motor_thermistor,
             Motor& motor,
             TrapezoidalTrajectory& trap,
             Endstop& min_endstop,
-            Endstop& max_endstop);
+            Endstop& max_endstop,
+            MechanicalBrake& mechanical_brake);
 
-    void setup();
+    bool apply_config();
+    void clear_config();
+
+    bool setup();
     void start_thread();
     void signal_current_meas();
     bool wait_for_current_meas();
@@ -92,10 +137,6 @@ public:
     void step_cb();
     void set_step_dir_active(bool enable);
     void decode_step_dir_pins();
-
-    static void load_default_step_dir_pin_config(
-        const AxisHardwareConfig_t& hw_config, Config_t* config);
-    static void load_default_can_id(const int& id, Config_t& config);
 
     bool check_DRV_fault();
     bool check_PSU_brownout();
@@ -143,11 +184,18 @@ public:
     template<typename T>
     void run_control_loop(const T& update_handler) {
         while (requested_state_ == AXIS_STATE_UNDEFINED) {
+            task_times_.control_loop.beginTimer();
+
             // look for errors at axis level and also all subcomponents
+            task_times_.axis_error_check.beginTimer();
             bool checks_ok = do_checks();
+            task_times_.axis_error_check.stopTimer();
+
             // Update all estimators
             // Note: updates run even if checks fail
-            bool updates_ok = do_updates(); 
+            task_times_.axis_update.beginTimer();
+            bool updates_ok = do_updates();
+            task_times_.axis_update.stopTimer();
 
             // make sure the watchdog is being fed. 
             bool watchdog_ok = watchdog_check();
@@ -161,10 +209,23 @@ public:
 
             // Run main loop function, defer quitting for after wait
             // TODO: change arming logic to arm after waiting
+            task_times_.update_handler.beginTimer();
             bool main_continue = update_handler();
+            task_times_.update_handler.stopTimer();
+
+            if (axis_num_ == 0) {
+                task_times_.uart_poll.beginTimer();
+                uart_poll(); // TODO: move to board-level control loop once it exists
+                task_times_.uart_poll.stopTimer();
+            }
 
             // Check we meet deadlines after queueing
             ++loop_counter_;
+
+            task_times_.control_loop.stopTimer();
+            task_times_.total.stopTimer();
+            if(axis_num_ == 1)
+                TaskTimer::sample_next = false;
 
             // Wait until the current measurement interrupt fires
             if (!wait_for_current_meas()) {
@@ -175,6 +236,7 @@ public:
                 error_ |= ERROR_CURRENT_MEASUREMENT_TIMEOUT;
                 break;
             }
+            task_times_.total.beginTimer();
 
             if (!main_continue)
                 break;
@@ -193,24 +255,22 @@ public:
 
     void run_state_machine_loop();
 
+    // hardware config
     int axis_num_;
-    const AxisHardwareConfig_t& hw_config_;
-    Config_t& config_;
+    uint16_t default_step_gpio_pin_;
+    uint16_t default_dir_gpio_pin_;
+    osPriority thread_priority_;
+    Config_t config_;
 
     Encoder& encoder_;
     SensorlessEstimator& sensorless_estimator_;
     Controller& controller_;
-    OnboardThermistorCurrentLimiter& fet_thermistor_;
-    OffboardThermistorCurrentLimiter& motor_thermistor_;
     Motor& motor_;
     TrapezoidalTrajectory& trap_traj_;
     Endstop& min_endstop_;
     Endstop& max_endstop_;
-
-    // List of current_limiters and thermistors to
-    // provide easy iteration.
-    std::array<CurrentLimiter*, 2> current_limiters_;
-    std::array<ThermistorCurrentLimiter*, 2> thermistors_;
+    MechanicalBrake& mechanical_brake_;
+    TaskTimes_t task_times_;
 
     osThreadId thread_id_;
     const uint32_t stack_size_ = 2048; // Bytes
@@ -221,18 +281,17 @@ public:
     bool step_dir_active_ = false; // auto enabled after calibration, based on config.enable_step_dir
 
     // updated from config in constructor, and on protocol hook
-    GPIO_TypeDef* step_port_;
-    uint16_t step_pin_;
-    GPIO_TypeDef* dir_port_;
-    uint16_t dir_pin_;
+    Stm32Gpio step_gpio_;
+    Stm32Gpio dir_gpio_;
 
     AxisState requested_state_ = AXIS_STATE_STARTUP_SEQUENCE;
     std::array<AxisState, 10> task_chain_ = { AXIS_STATE_UNDEFINED };
     AxisState& current_state_ = task_chain_.front();
     uint32_t loop_counter_ = 0;
     LockinState lockin_state_ = LOCKIN_STATE_INACTIVE;
-    Homing_t homing_;
-    uint32_t last_heartbeat_ = 0;
+    Homing_t homing_;    
+    CAN_t can_;
+
 
     // watchdog
     uint32_t watchdog_current_value_= 0;

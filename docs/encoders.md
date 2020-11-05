@@ -148,6 +148,30 @@ If you are using an encoder with an index signal, another problem that has been 
 * when performing an index_search, the motor does not return to the same position each time.
 One easy step that _might_ fix the noise on the Z input is to solder a 22nF-47nF capacitor to the Z pin and the GND pin on the underside of the ODrive board. 
 
+## Hall feedback pinout
+If position accuracy is not a concern, you can use A/B/C hall effect encoders for position feedback.
+
+To use this mode, configure the corresponding encoder mode: `<encoder>.config.mode = ENCODER_MODE_HALL`. Configure the corresponding GPIOs as digital inputs:
+
+For encoder 0:
+
+    <odrv>.config.gpio9_mode = GPIO_MODE_DIGITAL
+    <odrv>.config.gpio10_mode = GPIO_MODE_DIGITAL
+    <odrv>.config.gpio11_mode = GPIO_MODE_DIGITAL
+
+For encoder 1:
+
+    <odrv>.config.gpio12_mode = GPIO_MODE_DIGITAL
+    <odrv>.config.gpio13_mode = GPIO_MODE_DIGITAL
+    <odrv>.config.gpio14_mode = GPIO_MODE_DIGITAL
+
+In this mode, the pinout on the encoder port is as follows:
+
+| Label on ODrive | Hall feedback |
+|-----------------|---------------|
+| A               | Hall A        |
+| B               | Hall B        |
+| Z               | Hall C        |
 
 ## SPI Encoders
 
@@ -181,3 +205,4 @@ If you are having calibration problems, make sure that your magnet is centered o
 Sometimes the encoder takes longer than the ODrive to start, in which case you need to clear the errors after every restart.
 
 If you are having calibration problems - make sure your magnet is centered on the axis of rotation on the motor, some users report this has a significant impact on calibration. Also make sure your magnet height is within range of the spec sheet.
+

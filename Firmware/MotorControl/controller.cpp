@@ -2,12 +2,10 @@
 #include "odrive_main.h"
 #include <algorithm>
 
-#include <algorithm>
-
-Controller::Controller(Config_t& config) :
-    config_(config)
-{
+bool Controller::apply_config() {
+    config_.parent = this;
     update_filter_gains();
+    return true;
 }
 
 void Controller::reset() {
@@ -29,7 +27,7 @@ void Controller::set_error(Error error) {
 
 bool Controller::select_encoder(size_t encoder_num) {
     if (encoder_num < AXIS_COUNT) {
-        Axis* ax = axes[encoder_num];
+        Axis* ax = &axes[encoder_num];
         pos_estimate_circular_src_ = &ax->encoder_.pos_circular_;
         pos_wrap_src_ = &config_.circular_setpoint_range;
         pos_estimate_linear_src_ = &ax->encoder_.pos_estimate_;
@@ -175,8 +173,8 @@ bool Controller::update(float* torque_setpoint_output) {
         } break;
         case INPUT_MODE_MIRROR: {
             if (config_.axis_to_mirror < AXIS_COUNT) {
-                pos_setpoint_ = axes[config_.axis_to_mirror]->encoder_.pos_estimate_ * config_.mirror_ratio;
-                vel_setpoint_ = axes[config_.axis_to_mirror]->encoder_.vel_estimate_ * config_.mirror_ratio;
+                pos_setpoint_ = axes[config_.axis_to_mirror].encoder_.pos_estimate_ * config_.mirror_ratio;
+                vel_setpoint_ = axes[config_.axis_to_mirror].encoder_.vel_estimate_ * config_.mirror_ratio;
             } else {
                 set_error(ERROR_INVALID_MIRROR_AXIS);
                 return false;
@@ -233,7 +231,7 @@ bool Controller::update(float* torque_setpoint_output) {
             pos_setpoint_ = fmodf_pos(pos_setpoint_, *pos_wrap_src_);
             // Circular delta
             pos_err = pos_setpoint_ - *pos_estimate_circular;
-            pos_err = wrap_pm(pos_err, 0.5f * *pos_wrap_src_);
+            pos_err = wrap_pm(pos_err, *pos_wrap_src_);
         } else {
             if(!pos_estimate_linear) {
                 set_error(ERROR_INVALID_ESTIMATE);
@@ -275,7 +273,7 @@ bool Controller::update(float* torque_setpoint_output) {
     if (axis_->motor_.config_.motor_type == Motor::MOTOR_TYPE_ACIM) {
         float effective_flux = axis_->motor_.current_control_.acim_rotor_flux;
         float minflux = axis_->motor_.config_.acim_gain_min_flux;
-        if (fabsf(effective_flux) < minflux)
+        if (std::abs(effective_flux) < minflux)
             effective_flux = std::copysignf(minflux, effective_flux);
         vel_gain /= effective_flux;
         vel_integrator_gain /= effective_flux;

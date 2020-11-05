@@ -161,7 +161,7 @@ class TestEncoderOffsetCalibration():
         # run test
         request_state(axis_ctx, AXIS_STATE_ENCODER_OFFSET_CALIBRATION)
 
-        time.sleep(9) # actual calibration takes 8 seconds
+        time.sleep(9.1) # actual calibration takes 9.0 seconds
         
         test_assert_eq(axis_ctx.handle.current_state, AXIS_STATE_IDLE)
         test_assert_no_error(axis_ctx)
@@ -227,7 +227,7 @@ class TestEncoderIndexSearch():
         test_assert_eq(axis_ctx.handle.encoder.shadow_count, 0.0, range=50)
         test_assert_eq(modpm(axis_ctx.handle.encoder.count_in_cpr, cpr), 0.0, range=50)
         test_assert_eq(axis_ctx.handle.encoder.pos_estimate, 0.0, range=50)
-        test_assert_eq(modpm(axis_ctx.handle.encoder.pos_cpr, cpr), 0.0, range=50)
+        test_assert_eq(modpm(axis_ctx.handle.encoder.pos_cpr_counts, cpr), 0.0, range=50)
         test_assert_eq(axis_ctx.handle.encoder.pos_abs, 0.0, range=50)
 
 
